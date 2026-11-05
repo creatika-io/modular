@@ -12,7 +12,8 @@ export 'src/app/modular_app.dart';
 export 'src/module/module.dart';
 export 'src/navigation/modular_navigation.dart';
 export 'src/navigation/modular_router_config.dart';
-export 'src/navigation/outlet.dart' show RouterOutlet, RouterOutletState;
+export 'src/navigation/outlet.dart'
+    show RouterOutlet, RouterOutletEntry, RouterOutletState;
 export 'src/navigation/transition.dart'
     show CustomTransition, PageTransition, TransitionType;
 export 'src/route/modular_route.dart';

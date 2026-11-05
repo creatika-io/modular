@@ -3,6 +3,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'app/app_module.dart';
+import 'app/app_shell.dart';
 import 'core/state/theme_controller.dart';
 
 /// Entry point. [ModularApp] bootstraps [appModule] once, owns the injector,
@@ -21,6 +22,7 @@ void main() {
       // (the bare `/` has no page). A real entry URL still overrides it.
       initialRoute: '/home',
       provide: (s) => s.addChangeNotifier<ThemeController>(ThemeController.new),
+      shellBuilder: (context, child) => AppShell(child: child),
       child: const AppRoot(),
     ),
   );

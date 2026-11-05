@@ -25,6 +25,13 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
+              icon: const Icon(Icons.visibility),
+              label: const Text('Quick look'),
+              onPressed: () =>
+                  context.navigateOutlets({'sheet': '/home/products/1'}),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
               icon: const Icon(Icons.settings),
               label: const Text('Settings'),
               onPressed: () => context.pushNamed('./settings'),

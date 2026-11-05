@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **Named outlets** (Angular's `<router-outlet name>`): `c.outlet('sheet')`
+  declares routes in one or includes a module unchanged (a custom
+  `ModularContext` opts in by implementing `NamedOutletRegistrar`); host
+  `RouterOutlet(name: 'sheet')` in the new `ModularApp.shellBuilder`.
+  `context.navigateOutlets` and `context.closeOutlet` open and close it
+  without remounting the page beneath; the URL carries its top page
+  (`/home(sheet:products/42)`), each page in it is a browser history entry,
+  and the URL is read only once the app declares a named outlet.
+  `RouteState.outlets`, `fromLocation` and `location` expose it, and
+  `RouterOutlet.builder` presents an outlet's pages yourself. See
+  [Named outlets](README.md#named-outlets).
+- Feature lifecycle tags no longer collide: a named-outlet mount is tagged
+  `sheet:/x`, and distinct modules at one path get `/x` and `/x#2` instead of
+  the later one replacing the earlier's binds.
+
 ## 7.1.1
 
 - **Fix: feature modules reached through a `RouterOutlet` now get their binds.**

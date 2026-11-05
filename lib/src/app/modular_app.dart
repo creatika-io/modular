@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../module/module.dart';
 import '../navigation/modular_router_config.dart';
+import '../navigation/modular_router_delegate.dart';
 import '../navigation/transition.dart';
 import '../route/route_state.dart';
 import '../state/scoped.dart';
@@ -47,6 +48,7 @@ class ModularApp extends StatefulWidget {
     this.navigatorKey,
     this.navigatorObservers = const [],
     this.defaultTransition = TransitionType.material,
+    this.shellBuilder,
     super.key,
   });
 
@@ -82,6 +84,10 @@ class ModularApp extends StatefulWidget {
   /// [CustomTransition], or your own implementation.
   final PageTransition defaultTransition;
 
+  /// Wraps the stack's base page, inside its route: the place for named
+  /// outlets. Pushed pages cover it, and a new base page gets a new shell.
+  final Widget Function(BuildContext context, Widget child)? shellBuilder;
+
   /// The router config built by the nearest enclosing [ModularApp].
   static RouterConfig<RouteState> routerConfigOf(BuildContext context) {
     final scope = context
@@ -108,7 +114,15 @@ class _ModularAppState extends State<ModularApp> {
     navigatorKey: widget.navigatorKey,
     observers: widget.navigatorObservers,
     defaultTransition: widget.defaultTransition,
+    shellBuilder: widget.shellBuilder,
   );
+
+  @override
+  void didUpdateWidget(ModularApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    (_routerConfig.routerDelegate as ModularRouterDelegate).shellBuilder =
+        widget.shellBuilder;
+  }
 
   @override
   Widget build(BuildContext context) {
