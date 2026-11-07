@@ -1,6 +1,8 @@
 import 'package:example/app/app_module.dart';
+import 'package:example/app/app_shell.dart';
 import 'package:example/app/checkout/data/checkout_service.dart';
 import 'package:example/app/dashboard/dashboard_shell.dart';
+import 'package:example/app/products/pages/product_detail_page.dart';
 import 'package:example/core/state/theme_controller.dart';
 import 'package:example/main.dart';
 import 'package:flutter/material.dart';
@@ -11,8 +13,15 @@ Widget app() => ModularApp(
   module: appModule,
   initialRoute: '/home', // the landing feature is mounted at /home
   provide: (s) => s.addChangeNotifier<ThemeController>(ThemeController.new),
+  shellBuilder: (context, child) => AppShell(child: child),
   child: const AppRoot(),
 );
+
+String _reportedUrl(WidgetTester tester) {
+  final router =
+      tester.widget(find.byWidgetPredicate((w) => w is Router)) as Router;
+  return router.routeInformationProvider!.value.uri.toString();
+}
 
 void main() {
   testWidgets('home → products list loads from the repository (SSoT)', (
@@ -225,5 +234,30 @@ void main() {
     await tester.tap(find.text('Open secret area'));
     await tester.pumpAndSettle();
     expect(find.text('🔓 Secret area unlocked'), findsOneWidget);
+  });
+
+  testWidgets('products: the same detail page as a sheet over home or as a '
+      'full page', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Quick look'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProductDetailPage), findsOneWidget);
+    expect(find.text('Mechanical Keyboard'), findsOneWidget);
+    expect(find.text('A tiny store, modular.'), findsOneWidget);
+    expect(_reportedUrl(tester), '/home(sheet:home/products/1)');
+
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProductDetailPage), findsNothing);
+    expect(_reportedUrl(tester), '/home');
+
+    await tester.tap(find.text('Browse products'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mechanical Keyboard'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProductDetailPage), findsOneWidget);
+    expect(find.text('A tiny store, modular.'), findsNothing);
   });
 }

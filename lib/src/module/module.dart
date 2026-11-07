@@ -41,6 +41,10 @@ String _mountPathError(String? path) =>
     'Invalid module path "$path": it must start with "/" and contain no '
     'dynamic segment (":"). Put `:params` on the routes inside the module.';
 
+/// Outlet names are URL group keys (`/home(sheet:card)`).
+bool _isValidOutletName(String? outlet) =>
+    outlet == null || RegExp(r'^[\w-]+$').hasMatch(outlet);
+
 class _FunctionalModule extends Module {
   _FunctionalModule(this.path, this._register);
 
@@ -77,6 +81,31 @@ abstract class ModularContext {
   void addSingleton<T>(Function constructor);
   void addLazySingleton<T>(Function constructor);
   void addInstance<T>(T instance);
+}
+
+/// Implemented by a [ModularContext] that can declare routes in named outlets,
+/// which `c.outlet(name)` needs. A custom registrar (a decorator, a test
+/// double) implements it to support named outlets.
+abstract interface class NamedOutletRegistrar {
+  /// A registrar whose routes and module includes go into the named outlet
+  /// [name]; its binds are the parent's.
+  ModularContext namedOutlet(String name);
+}
+
+/// Named outlets on any registrar that supports them.
+extension NamedOutletX on ModularContext {
+  /// Declares routes in the named outlet [name], shown by
+  /// `RouterOutlet(name: name)` beside the primary page:
+  /// `c.outlet('sheet')..route('/card', ...)..module(productsModule)`.
+  ModularContext outlet(String name) {
+    if (this case final NamedOutletRegistrar registrar) {
+      return registrar.namedOutlet(name);
+    }
+    throw UnsupportedError(
+      '$runtimeType does not implement NamedOutletRegistrar, which '
+      'c.outlet("$name") needs.',
+    );
+  }
 }
 
 /// The active resolution injector, set by [bootstrapModule]. Backs [inject].
@@ -121,7 +150,7 @@ ModularBootstrap bootstrapModule(Module root) {
   final ctx = _ContextImpl(
     routes: topLevel,
     manager: manager,
-    seen: {root},
+    mounts: _Mounts(root),
     ownerTags: const [],
     collect: null, // root-owned: binds applied to root
   );
@@ -202,24 +231,57 @@ class ModuleManager {
   }
 }
 
-class _ContextImpl implements ModularContext {
+/// The module registrations of one bootstrap.
+class _Mounts {
+  _Mounts(Module root)
+    : registeredRoutes = {root: const []},
+      _included = {(root, null)};
+
+  final Set<(Module, String?)> _included;
+  final Set<String> _tags = {};
+
+  /// Whether [module] is new to [outlet] (`null`: the primary routes).
+  bool include(Module module, String? outlet) =>
+      _included.add((module, outlet));
+
+  /// Each module's routes, registered once, owned relative to it; empty while
+  /// it registers, so a module including itself mounts nothing.
+  final Map<Module, List<ModularRoute>> registeredRoutes;
+
+  /// Two features never share a lifecycle.
+  String uniqueTag(String path) {
+    var tag = path;
+    for (var copy = 2; !_tags.add(tag); copy++) {
+      tag = '$path#$copy';
+    }
+    return tag;
+  }
+}
+
+class _ContextImpl implements ModularContext, NamedOutletRegistrar {
   _ContextImpl({
     required List<ModularRoute> routes,
     required ModuleManager manager,
-    required Set<Module> seen,
+    required _Mounts mounts,
     required List<String> ownerTags,
     required List<void Function(AutoInjector)>? collect,
     String prefix = '',
+    bool declaresChildren = false,
+    String? outlet,
+    String? tagOutlet,
   }) : _routes = routes,
        _manager = manager,
-       _seen = seen,
+       _mounts = mounts,
        _ownerTags = ownerTags,
        _collect = collect,
-       _prefix = prefix;
+       _prefix = prefix,
+       _declaresChildren = declaresChildren,
+       _outlet = outlet,
+       _tagOutlet = tagOutlet;
 
   final List<ModularRoute> _routes;
   final ModuleManager _manager;
-  final Set<Module> _seen;
+  final _Mounts _mounts;
   final List<String> _ownerTags;
 
   /// The full path prefix at which this context's routes will live — the base
@@ -229,6 +291,34 @@ class _ContextImpl implements ModularContext {
   /// When non-null, `add*` calls are COLLECTED here (a feature module, bound
   /// lazily) instead of applied to the root injector (root-owned).
   final List<void Function(AutoInjector)>? _collect;
+
+  final bool _declaresChildren;
+
+  /// The named outlet this registrar declares routes in.
+  final String? _outlet;
+
+  /// The named outlet this registration's lifecycle tags are qualified with.
+  final String? _tagOutlet;
+
+  @override
+  ModularContext namedOutlet(String name) {
+    assert(_isValidOutletName(name), 'Invalid outlet name "$name".');
+    assert(
+      !_declaresChildren,
+      'c.outlet("$name") must be called at the top level of the route tree, '
+      'not inside `children`.',
+    );
+    return _ContextImpl(
+      routes: _routes,
+      manager: _manager,
+      mounts: _mounts,
+      ownerTags: _ownerTags,
+      collect: _collect,
+      prefix: _prefix,
+      outlet: name,
+      tagOutlet: _tagOutlet,
+    );
+  }
 
   @override
   void route(
@@ -254,70 +344,80 @@ class _ContextImpl implements ModularContext {
         guards: guards ?? const [],
         transition: transition,
         ownerTags: _ownerTags,
+        outlet: _outlet,
       ),
     );
   }
 
   @override
   void module(Module module, {String? at}) {
-    if (!_seen.add(module)) return; // dedup by IDENTITY
+    final outlet = _outlet;
+    if (!_mounts.include(module, outlet)) return; // dedup by IDENTITY
     final path = at ?? module.path;
     assert(_isValidMountPath(path), _mountPathError(path));
-    if (path == null) {
-      // Shared DI module: its binds are ROOT-OWNED (never disposed) even when
-      // included inside a feature; its routes (if any) sit at this level.
-      module.register(_rootOwned());
-      return;
-    }
-    // FEATURE: flatten the submodule's routes under [path] (no RouterOutlet —
-    // use one explicitly for a shell) and feature-scope its binds under the
-    // FULL mounted path, so they dispose when its last route leaves.
-    final tag = _joinPath(_prefix, path);
-    final featureBinds = <void Function(AutoInjector)>[];
-    final sub = _ContextImpl(
-      routes: [],
-      manager: _manager,
-      seen: _seen,
-      ownerTags: [..._ownerTags, tag],
-      collect: featureBinds,
-      prefix: tag,
-    );
-    module.register(sub);
-    _manager.registerFeature(tag, featureBinds);
-    for (final route in sub._routes) {
-      _routes.add(_prefixed(path, route));
+    final routes =
+        _mounts.registeredRoutes[module] ?? _registerOnce(module, path);
+    for (final route in routes) {
+      assert(
+        outlet == null || route.outlet == null,
+        'The route "${route.path}" declares the outlet "${route.outlet}"; a '
+        'module mounted into the outlet "$outlet" declares none.',
+      );
+      _routes.add(_mounted(route, at: path, outlet: outlet));
     }
   }
 
-  /// A view of this context whose `add*` go to the ROOT injector (shared, never
-  /// disposed) while routes still land here.
-  _ContextImpl _rootOwned() => _ContextImpl(
-    routes: _routes,
-    manager: _manager,
-    seen: _seen,
-    ownerTags: _ownerTags,
-    collect: null,
-    prefix: _prefix,
-  );
+  List<ModularRoute> _registerOnce(Module module, String? path) {
+    _mounts.registeredRoutes[module] = const [];
+    final mountedPath = path == null ? _prefix : _joinPath(_prefix, path);
+    final tagOutlet = _outlet ?? _tagOutlet;
+    final tag = path == null
+        ? null
+        : _mounts.uniqueTag(
+            tagOutlet == null ? mountedPath : '$tagOutlet:$mountedPath',
+          );
+    final featureBinds = tag == null ? null : <void Function(AutoInjector)>[];
+    final registration = _ContextImpl(
+      routes: [],
+      manager: _manager,
+      mounts: _mounts,
+      ownerTags: [?tag],
+      collect: featureBinds,
+      prefix: mountedPath,
+      declaresChildren: _declaresChildren,
+      tagOutlet: tagOutlet,
+    );
+    module.register(registration);
+    if (tag != null) _manager.registerFeature(tag, featureBinds!);
+    return _mounts.registeredRoutes[module] = registration._routes;
+  }
 
   _ContextImpl _sub(List<ModularRoute> routes) => _ContextImpl(
     routes: routes,
     manager: _manager,
-    seen: _seen,
+    mounts: _mounts,
     ownerTags: _ownerTags,
     collect: _collect,
     prefix: _prefix,
+    declaresChildren: true,
+    tagOutlet: _tagOutlet,
   );
 
-  ModularRoute _prefixed(String at, ModularRoute route) => ModularRoute(
-    _joinPath(at, route.path),
-    route.builder,
-    provide: route.provide,
-    children: route.children, // stay relative — matched hierarchically
-    guards: route.guards,
-    transition: route.transition,
-    ownerTags: route.ownerTags,
-  );
+  ModularRoute _mounted(ModularRoute route, {String? at, String? outlet}) =>
+      ModularRoute(
+        at == null ? route.path : _joinPath(at, route.path),
+        route.builder,
+        provide: route.provide,
+        children: route.children.isEmpty
+            ? route.children
+            : [for (final child in route.children) _mounted(child)],
+        guards: route.guards,
+        transition: route.transition,
+        ownerTags: route.ownerTags.isEmpty
+            ? _ownerTags
+            : [..._ownerTags, ...route.ownerTags],
+        outlet: outlet ?? route.outlet,
+      );
 
   String _joinPath(String at, String path) {
     final segments = [

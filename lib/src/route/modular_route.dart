@@ -24,6 +24,7 @@ class ModularRoute {
     this.guards = const [],
     this.transition,
     this.ownerTags = const [],
+    this.outlet,
   });
 
   final String path;
@@ -40,6 +41,9 @@ class ModularRoute {
   /// route. When the LAST active route of a tag leaves the stack, that module's
   /// binds are disposed. Empty for root-owned routes.
   final List<String> ownerTags;
+
+  /// The named outlet this route renders in, or `null` for the primary routes.
+  final String? outlet;
 }
 
 /// One matched level of a route chain: the route + its captured path params.
@@ -58,8 +62,19 @@ class RouteCollection {
 
   void add(ModularRoute route) => _routes.add(route);
 
-  /// Matches [uri] to a chain of routes (root → leaf) with params, or `null`.
-  List<RouteLevel>? match(Uri uri) => _matchChain(_routes, _segments(uri.path));
+  /// Matches [uri] to a chain of primary routes (root → leaf) with params, or
+  /// `null`.
+  List<RouteLevel>? match(Uri uri) =>
+      _matchChain(_routesIn(null), _segments(uri.path));
+
+  /// Like [match], among the routes of the named [outlet].
+  List<RouteLevel>? matchOutlet(String outlet, Uri uri) =>
+      _matchChain(_routesIn(outlet), _segments(uri.path));
+
+  List<ModularRoute> _routesIn(String? outlet) => [
+    for (final route in _routes)
+      if (route.outlet == outlet) route,
+  ];
 }
 
 List<RouteLevel>? _matchChain(

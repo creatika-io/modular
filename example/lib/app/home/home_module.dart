@@ -15,6 +15,7 @@ final homeModule = createModule(
       ..module(settingsModule)
       ..module(argsModule)
       ..module(checkoutModule)
-      ..module(dashboardModule);
+      ..module(dashboardModule)
+      ..outlet('sheet').module(productsModule);
   },
 );

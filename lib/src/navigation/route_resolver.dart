@@ -22,3 +22,14 @@ Uri resolveRoute(String reference, Uri current) {
   final dir = current.path.endsWith('/') ? current.path : '${current.path}/';
   return Uri(path: dir).resolveUri(ref);
 }
+
+/// The path alone, without empty segments, encoded one way: equal outlet
+/// routes get equal locations, so a reported URL reads back unchanged.
+Uri canonicalOutletLocation(Uri location) {
+  final segments = [
+    for (final segment in location.pathSegments)
+      if (segment.isNotEmpty) segment,
+  ];
+  if (segments.isEmpty) return Uri(path: '/');
+  return Uri(pathSegments: ['', ...segments]);
+}

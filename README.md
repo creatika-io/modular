@@ -65,6 +65,7 @@ If it's for the Flutterando version of the template just send a message to us (o
       <li><a href="#declare-a-module">Declare a module</a></li>
       <li><a href="#bootstrap-with-modularapp">Bootstrap with ModularApp</a></li>
       <li><a href="#navigate">Navigate</a></li>
+      <li><a href="#named-outlets">Named outlets</a></li>
       <li><a href="#page-scoped-state">Page-scoped state</a></li>
     </ol>
   </li>
@@ -185,7 +186,7 @@ Go to the next topic and start your journey towards an intelligent structure.
 
 ## <div id="usage">✨ Usage</div>
 
-> **flutter_modular 7 is a ground-up rewrite.** A **Module** is now exactly the two things that couple a Flutter app — **Dependency Injection + Routes** — declared with a small functional API. State is **page-scoped**, tied to the route lifecycle, so ownership and disposal stop being your problem and the durable truth lives in a repository/service registered in DI. Full, runnable demonstrations (nested routes, `RouterOutlet` shells, route guards, per-module DI lifecycle, `arguments`/pop-results) live in [`example/`](example/).
+> **flutter_modular 7 is a ground-up rewrite.** A **Module** is now exactly the two things that couple a Flutter app — **Dependency Injection + Routes** — declared with a small functional API. State is **page-scoped**, tied to the route lifecycle, so ownership and disposal stop being your problem and the durable truth lives in a repository/service registered in DI. Full, runnable demonstrations (nested routes, `RouterOutlet` shells, named outlets, route guards, per-module DI lifecycle, `arguments`/pop-results) live in [`example/`](example/).
 
 ### Install
 
@@ -238,6 +239,31 @@ context.pushNamed('/details/42'); // stacks a page (push stays out of the URL)
 context.navigate('/');            // replaces the stack (owns the URL, resets history)
 context.pop(result);              // pops, delivering a result to the awaiting pushNamed
 ```
+
+### Named outlets
+
+A **named outlet** — Angular's `<router-outlet name>` — shows a route beside the current page instead of replacing it. `c.outlet('sheet')` declares routes in one, or includes a module unchanged, so the same pages work full screen and in the outlet:
+
+```dart
+register: (c) => c
+  ..module(productsModule)                   // /products/42: a full page
+  ..outlet('sheet').module(productsModule);  // /home(sheet:products/42): a sheet
+
+ModularApp(
+  module: appModule,
+  shellBuilder: (context, child) => Stack(
+    children: [child, const RouterOutlet(name: 'sheet')],
+  ),
+  child: const AppRoot(),
+);
+
+context.navigateOutlets({'sheet': '/products/42'}); // opens (or resets) the sheet
+context.closeOutlet('sheet');                        // or closeOutlet() inside it
+```
+
+A module is included once; an outlet mount reuses that inclusion. A custom `ModularContext` supports `outlet()` by implementing `NamedOutletRegistrar`. The shell is built inside the base page: pages pushed above it cover it, and a new base page gets a new shell. The URL carries each open outlet's top page, and each page an outlet shows is a browser history entry: Back returns to the page below, and a refresh shows the top page alone. Entries are told apart by path: pushing the page already on top adds none, pushes in one frame add one, and Back or Forward onto a repeated page goes to its nearest copy. Outlet guards see the path params; one that keeps redirecting makes the navigation throw, and a URL holding it opens without that outlet. System back reaches an open outlet after the pages above it. `navigate('/home(sheet:products/42)')` replaces the whole location. Outlet groups are read only once the app declares a named-outlet route.
+
+> Flutter's development server can return HTTP 500 when reloading outlet URLs; use a release build with an `index.html` fallback.
 
 ### Page-scoped state
 

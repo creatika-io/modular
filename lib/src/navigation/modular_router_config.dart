@@ -22,6 +22,7 @@ RouterConfig<RouteState> modularRouterConfig(
   GlobalKey<NavigatorState>? navigatorKey,
   List<NavigatorObserver> observers = const [],
   PageTransition defaultTransition = TransitionType.material,
+  Widget Function(BuildContext context, Widget child)? shellBuilder,
 }) {
   final inj = injector ?? (AutoInjector()..commit());
   return RouterConfig<RouteState>(
@@ -32,8 +33,9 @@ RouterConfig<RouteState> modularRouterConfig(
       navigatorKey: navigatorKey,
       observers: observers,
       defaultTransition: defaultTransition,
+      shellBuilder: shellBuilder,
     ),
-    routeInformationParser: ModularRouteInformationParser(),
+    routeInformationParser: ModularRouteInformationParser(routes: routes),
     routeInformationProvider: PlatformRouteInformationProvider(
       initialRouteInformation: RouteInformation(uri: _initialUri(initialRoute)),
     ),
