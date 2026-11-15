@@ -867,6 +867,48 @@ void main() {
     expect(_reportedUrl(tester), '/home(sheet:card)');
   });
 
+  testWidgets('a named outlet in a page follows the route after the page '
+      'moves it', (tester) async {
+    final moved = ValueNotifier(false);
+    addTearDown(moved.dispose);
+    final outletKey = GlobalKey();
+    final hostModule = createModule(
+      register: (c) {
+        c.route(
+          '/',
+          child: (ctx, s) => ValueListenableBuilder<bool>(
+            valueListenable: moved,
+            builder: (context, isMoved, _) {
+              final outlet = RouterOutlet(key: outletKey, name: 'sheet');
+              return isMoved ? Center(child: outlet) : outlet;
+            },
+          ),
+        );
+        c.outlet('sheet').route('/card', child: (ctx, s) => const Text('card'));
+      },
+    );
+    final boot = bootstrapModule(hostModule);
+    await tester.pumpWidget(
+      MaterialApp.router(
+        routerConfig: modularRouterConfig(boot.routes, injector: boot.injector),
+      ),
+    );
+    await tester.pumpAndSettle();
+    tester.element(find.byKey(outletKey)).navigateOutlets({'sheet': '/card'});
+    await tester.pumpAndSettle();
+    expect(find.text('card'), findsOneWidget);
+
+    // Reparenting deactivates and reactivates the outlet's element.
+    moved.value = true;
+    await tester.pumpAndSettle();
+    expect(find.text('card'), findsOneWidget);
+
+    tester.element(find.byKey(outletKey)).closeOutlet('sheet');
+    await tester.pumpAndSettle();
+    expect(find.text('card'), findsNothing);
+    expect(_reportedUrl(tester), '/');
+  });
+
   testWidgets('ModularApp applies a new shellBuilder, keeping page state', (
     tester,
   ) async {

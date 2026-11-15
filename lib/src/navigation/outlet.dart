@@ -224,10 +224,11 @@ class RouterOutletState extends State<RouterOutlet> {
       'in a page of the root stack.',
     );
     _source = _OutletSource.named(name, delegate);
+    // Read before returning early: a reactivated element must subscribe again.
+    final top = RouteStateScope.of(context)?.outlets[name];
     final navigation = delegate.outletNavigation(name);
     if (_followedNavigation == navigation.version) return;
     _followedNavigation = navigation.version;
-    final top = RouteStateScope.of(context)?.outlets[name];
     if (_followedOpening != navigation.opening) {
       _followedOpening = navigation.opening;
       _openWith(top);
