@@ -72,6 +72,7 @@ The navigation verbs are extension methods on `BuildContext`:
 context.pushNamed('/products/42');   // stack a page on top
 context.navigate('/home');           // replace the whole stack (reset history)
 context.replace('/login');           // replace just the top route
+context.replaceInPlace('../43');     // swap the top page's content, no transition
 context.pop(result);                 // pop, delivering a result to the awaiting pushNamed
 ```
 
@@ -80,6 +81,7 @@ context.pop(result);                 // pop, delivering a result to the awaiting
 | `pushNamed<T>(path, {arguments})` | Pushes a page; returns a `Future<T?>` completed by the matching `pop(result)`. |
 | `navigate(path, {arguments})` | Replaces the whole stack and **resets history**. The v7 unification of 6.x's `navigate` + `pushNavigate`. |
 | `replace<T>(path, {arguments})` | Replaces the **top** route (no back to the replaced one). |
+| `replaceInPlace<T>(path, {arguments})` | Replaces the **top** page's content without a transition or a new history entry; the page keeps its route unless `path` has another transition. |
 | `pop<T>([result])` | Pops the top route, completing its `pushNamed` future with `result`. |
 | `maybePop<T>([result])` | Pops only if there is something to pop; returns whether it did. |
 | `canPop()` | Whether `pop` would do anything. |
@@ -216,7 +218,9 @@ c.route('/details/:id',
 
 For full control — a `CupertinoPage` with interactive swipe-back, a
 `fullscreenDialog`, a custom barrier, shared-axis from the `animations` package —
-implement `PageTransition` and return whatever `Page` you like:
+implement `PageTransition` and return whatever `Page` you like. Its route must build
+from its current `settings`, as `MaterialPage`'s does, so `replaceInPlace` shows the
+new page:
 
 ```dart
 class SharedAxisTransition extends PageTransition {
@@ -224,7 +228,8 @@ class SharedAxisTransition extends PageTransition {
 
   @override
   Page<void> buildPage(LocalKey key, Widget child) =>
-      // any Page you want — e.g. CupertinoPage, a custom PageRouteBuilder, …
+      // any Page you want — e.g. CupertinoPage, or one whose PageRouteBuilder
+      // reads its child from ModalRoute.settingsOf(context), …
       CupertinoPage<void>(key: key, child: child);
 }
 
