@@ -260,4 +260,23 @@ void main() {
     expect(find.byType(ProductDetailPage), findsOneWidget);
     expect(find.text('A tiny store, modular.'), findsNothing);
   });
+
+  testWidgets('products: "Next product" swaps the sheet page in place', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Quick look'));
+    await tester.pumpAndSettle();
+    final route = ModalRoute.of(
+      tester.element(find.text('Mechanical Keyboard')),
+    );
+
+    await tester.tap(find.text('Next product'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ergonomic Mouse'), findsOneWidget);
+    expect(ModalRoute.of(tester.element(find.text('Ergonomic Mouse'))), route);
+    expect(_reportedUrl(tester), '/home(sheet:home/products/2)');
+  });
 }

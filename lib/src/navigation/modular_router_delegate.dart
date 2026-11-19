@@ -252,6 +252,25 @@ class ModularRouterDelegate extends RouterDelegate<RouteState>
     return entry.completer.future.then((value) => value as T?);
   }
 
+  /// Replaces the TOP route with [path] in place: the new route keeps the
+  /// replaced page's key, so the Navigator updates that page's route instead
+  /// of running a transition, unless [path] has another transition. Its
+  /// content is built anew. The browser history entry is replaced only
+  /// through `context.replaceInPlace`, which also reports any other
+  /// navigation in the same frame as a replacement.
+  Future<T?> replaceInPlace<T extends Object?>(
+    String path, {
+    Object? arguments,
+  }) {
+    final entry = _guardedEntry(path, arguments, replacing: _stack.lastOrNull);
+    final replaced = _stack.isEmpty ? null : _stack.removeLast();
+    if (_stack.isEmpty) _nestedLocation = null;
+    _push(entry);
+    if (replaced != null) _detach(replaced, null);
+    notifyListeners();
+    return entry.completer.future.then((value) => value as T?);
+  }
+
   /// Pops until [predicate] holds for the top route (or one route remains).
   void popUntil(bool Function(RouteState state) predicate) {
     var changed = false;
@@ -306,10 +325,14 @@ class ModularRouterDelegate extends RouterDelegate<RouteState>
 
   /// A guard redirect is a full location even for a push: its outlets replace
   /// the open ones.
-  _StackEntry _guardedEntry(String path, Object? arguments) {
+  _StackEntry _guardedEntry(
+    String path,
+    Object? arguments, {
+    _StackEntry? replacing,
+  }) {
     final destination = applyGuards(_requested(path, arguments));
     _installOutlets(destination.outlets);
-    return _entry(destination);
+    return _entry(destination, replacing: replacing);
   }
 
   void _installOutlets(Map<String, Uri> outlets) {
@@ -441,15 +464,18 @@ class ModularRouterDelegate extends RouterDelegate<RouteState>
     return null;
   }
 
-  _StackEntry _entry(RouteState state) {
+  /// An entry that [replacing] hands its page key on to, so the page keeps
+  /// its route.
+  _StackEntry _entry(RouteState state, {_StackEntry? replacing}) {
     final id = 'route-${_seq++}';
     final tags = routes.match(state.uri)?.last.route.ownerTags ?? const [];
     return _StackEntry(
       state.outlets.isEmpty ? state : _withOutlets(state, const {}),
-      ValueKey(id),
+      replacing?.key ?? ValueKey(id),
       id,
       Completer<Object?>(),
       tags,
+      storage: replacing == null ? null : PageStorageBucket(),
     );
   }
 
@@ -506,6 +532,7 @@ class ModularRouterDelegate extends RouterDelegate<RouteState>
       params: const {},
       arguments: entry.state.arguments,
       routes: routes,
+      storage: entry.storage,
       defaultTransition: defaultTransition,
     );
     final transition = chain.first.route.transition ?? defaultTransition;
@@ -520,12 +547,24 @@ class ModularRouterDelegate extends RouterDelegate<RouteState>
 }
 
 class _StackEntry {
-  _StackEntry(this.state, this.key, this.id, this.completer, this.ownerTags);
+  _StackEntry(
+    this.state,
+    this.key,
+    this.id,
+    this.completer,
+    this.ownerTags, {
+    this.storage,
+  });
   final RouteState state;
+
+  /// The page's key; a route replaced in place hands it on.
   final LocalKey key;
   final String id;
   final Completer<Object?> completer;
   final List<String> ownerTags;
+
+  /// Set on a page replaced in place, whose route keeps the old page storage.
+  final PageStorageBucket? storage;
 }
 
 class _RouteNotFound extends StatelessWidget {

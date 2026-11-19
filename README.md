@@ -240,6 +240,20 @@ context.navigate('/');            // replaces the stack (owns the URL, resets hi
 context.pop(result);              // pops, delivering a result to the awaiting pushNamed
 ```
 
+#### Replace in place
+
+`replace` swaps the top page for a new one, which plays the route's transition. `replaceInPlace` swaps the page's content instantly, for moving between siblings (the next product, another account) where a transition and a Back step would get in the way. Like `go_router`'s `replace` it keeps the page, but it builds the content anew where `go_router` keeps its `State`:
+
+```dart
+context.replaceInPlace('../2'); // /products/1 → /products/2: no transition, no new history entry
+```
+
+- A changed URL replaces the browser's current history entry, and so does another navigation in the same frame.
+- The content is built anew: its `State`, page-scoped `provide` state and page storage, such as a list's scroll offset. The shell, its outlets and a feature module both routes share stay.
+- With the same transition, the Navigator reuses the page's route: no transition runs, dialogs and sheets above it stay, and the Navigator emits no push or pop. Another transition gets a new route, and dialogs leave with the old one.
+- It targets the same stack as `replace`, named outlets included, and swaps only that stack's top page: called from a page below the top, it pops nothing.
+- A custom `PageTransition`'s route must build from its current `settings`, as `MaterialPage`'s does, or it keeps showing the replaced page.
+
 ### Named outlets
 
 A **named outlet** — Angular's `<router-outlet name>` — shows a route beside the current page instead of replacing it. `c.outlet('sheet')` declares routes in one, or includes a module unchanged, so the same pages work full screen and in the outlet:

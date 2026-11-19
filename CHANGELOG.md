@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`context.replaceInPlace`**: replaces the top page with a new route
+  without a new browser history entry, and without a transition unless the
+  new route has another transition. The page keeps its route, so dialogs
+  above it stay and the Navigator emits no push or pop, while its content
+  (`State`, `provide` scope, page storage) is built anew. See
+  [Replace in place](README.md#replace-in-place).
+- Fade, none and `CustomTransition` routes show the page the Navigator last
+  gave them, as Material routes do: their content follows each rebuild of the
+  delegate or outlet instead of keeping the first page's child.
 - **Named outlets** (Angular's `<router-outlet name>`): `c.outlet('sheet')`
   declares routes in one or includes a module unchanged (a custom
   `ModularContext` opts in by implementing `NamedOutletRegistrar`); host

@@ -55,9 +55,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   const SizedBox(height: 12),
                   Text(product.description),
                   const Spacer(),
-                  FilledButton(
-                    onPressed: () => context.pop(),
-                    child: const Text('Back'),
+                  Row(
+                    children: [
+                      FilledButton(
+                        onPressed: () => context.pop(),
+                        child: const Text('Back'),
+                      ),
+                      const SizedBox(width: 12),
+                      // Swaps to the next product without a transition or a
+                      // new browser history entry.
+                      OutlinedButton(
+                        onPressed: () =>
+                            context.replaceInPlace('../${vm.nextId}'),
+                        child: const Text('Next product'),
+                      ),
+                    ],
                   ),
                 ],
               ),

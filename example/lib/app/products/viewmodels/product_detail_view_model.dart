@@ -15,10 +15,16 @@ class ProductDetailViewModel extends ChangeNotifier {
   bool loading = true;
   Product? product;
 
+  /// The product after this one, wrapping around; set once loaded.
+  late String nextId;
+
   bool get connected => _connection.isOpen;
 
   Future<void> load(String id) async {
     product = await _repo.getById(id);
+    final products = await _repo.getProducts();
+    final index = products.indexWhere((p) => p.id == id);
+    nextId = products[(index + 1) % products.length].id;
     loading = false;
     notifyListeners();
   }

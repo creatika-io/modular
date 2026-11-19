@@ -17,6 +17,11 @@ abstract class PageTransition {
 
   /// Builds the [Page] for [child], stamped with [key] so the Navigator can
   /// track it across rebuilds.
+  ///
+  /// The Navigator may hand the page to the route of an earlier page with the
+  /// same key (as `replaceInPlace` does), so the route must build from its
+  /// current `settings`, like [MaterialPage]'s, not from the page it was
+  /// created with.
   Page<void> buildPage(LocalKey key, Widget child);
 }
 
@@ -122,7 +127,7 @@ class CustomTransition extends PageTransition {
 
 /// The [Page] backing [TransitionType.fade]/`.none` and [CustomTransition]:
 /// a [PageRouteBuilder] whose content is [child] and whose animation is
-/// [transitionsBuilder].
+/// [transitionsBuilder], both read from the route's current page.
 class _TransitionPage extends Page<void> {
   const _TransitionPage({
     required super.key,
@@ -145,6 +150,23 @@ class _TransitionPage extends Page<void> {
   final bool barrierDismissible;
   final bool fullscreenDialog;
 
+  /// The settings the route takes on when it is created.
+  (Duration, Duration?, bool, Color?, bool, bool) get _routeSettings => (
+    duration,
+    reverseDuration,
+    opaque,
+    barrierColor,
+    barrierDismissible,
+    fullscreenDialog,
+  );
+
+  /// Another transition needs another route.
+  @override
+  bool canUpdate(Page<dynamic> other) =>
+      super.canUpdate(other) &&
+      other is _TransitionPage &&
+      other._routeSettings == _routeSettings;
+
   @override
   Route<void> createRoute(BuildContext context) {
     return PageRouteBuilder<void>(
@@ -155,8 +177,14 @@ class _TransitionPage extends Page<void> {
       barrierColor: barrierColor,
       barrierDismissible: barrierDismissible,
       fullscreenDialog: fullscreenDialog,
-      pageBuilder: (context, animation, secondary) => child,
-      transitionsBuilder: transitionsBuilder,
+      pageBuilder: (context, animation, secondary) => _currentOf(context).child,
+      transitionsBuilder: (context, animation, secondary, child) => _currentOf(
+        context,
+      ).transitionsBuilder(context, animation, secondary, child),
     );
   }
+
+  /// The page the route of [context] shows now; an update hands it another.
+  static _TransitionPage _currentOf(BuildContext context) =>
+      ModalRoute.settingsOf(context)! as _TransitionPage;
 }

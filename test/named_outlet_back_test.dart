@@ -294,6 +294,22 @@ void main() {
     expect(_reportedUrl(tester), '/(sheet:cards/9)');
   });
 
+  testWidgets("a back still pending on a named outlet's only page never "
+      'closes the page replacing it in place', (tester) async {
+    slowPageMayPop = Completer<bool>();
+    await _pump(tester);
+    tester.element(find.text('home')).navigateOutlets({'sheet': '/slow'});
+    await tester.pumpAndSettle();
+
+    unawaited(tester.binding.handlePopRoute());
+    await tester.pump(); // back now waits on the slow page
+    unawaited(tester.element(find.text('slow')).replaceInPlace('/cards/9'));
+    slowPageMayPop.complete(true);
+    await tester.pumpAndSettle();
+    expect(find.text('card 9'), findsOneWidget);
+    expect(_reportedUrl(tester), '/(sheet:cards/9)');
+  });
+
   testWidgets('a back still pending never cancels an outside navigation', (
     tester,
   ) async {

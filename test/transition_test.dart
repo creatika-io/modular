@@ -29,7 +29,8 @@ class _Slide extends Page<void> {
   @override
   Route<void> createRoute(BuildContext context) => PageRouteBuilder<void>(
     settings: this,
-    pageBuilder: (_, __, ___) => child,
+    pageBuilder: (context, _, __) =>
+        (ModalRoute.settingsOf(context)! as _Slide).child,
     transitionsBuilder: (_, animation, __, c) => SlideTransition(
       position: animation.drive(
         Tween(begin: const Offset(1, 0), end: Offset.zero),
@@ -109,6 +110,72 @@ void main() {
 
     expect(find.text('own'), findsOneWidget);
     expect(find.byType(SlideTransition), findsWidgets);
+  });
+
+  testWidgets('a custom Page whose route builds from its current settings '
+      'shows the page replaced in place', (tester) async {
+    final module = createModule(
+      register: (c) {
+        c.route(
+          '/:id',
+          transition: const _SlidePage(),
+          child: (ctx, s) => Text('own ${s['id']}'),
+        );
+      },
+    );
+    final boot = bootstrapModule(module);
+    await tester.pumpWidget(
+      MaterialApp.router(
+        routerConfig: modularRouterConfig(boot.routes, initialRoute: '/a'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final route = _routeOf(tester, find.text('own a'));
+
+    tester.element(find.text('own a')).replaceInPlace('/b').ignore();
+    await tester.pumpAndSettle();
+
+    expect(find.text('own a'), findsNothing);
+    expect(_routeOf(tester, find.text('own b')), same(route));
+  });
+
+  testWidgets('CustomTransition sets the route flags', (tester) async {
+    final module = createModule(
+      register: (c) {
+        c
+          ..route('/', child: (ctx, s) => const Text('below'))
+          ..route(
+            '/overlay',
+            transition: CustomTransition(
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  child,
+              reverseDuration: const Duration(milliseconds: 100),
+              opaque: false,
+              barrierColor: const Color(0x80000000),
+              barrierDismissible: true,
+              fullscreenDialog: true,
+            ),
+            child: (ctx, s) => const Text('overlay'),
+          );
+      },
+    );
+    final boot = bootstrapModule(module);
+    await tester.pumpWidget(
+      MaterialApp.router(routerConfig: modularRouterConfig(boot.routes)),
+    );
+    await tester.pumpAndSettle();
+    tester.element(find.text('below')).pushNamed<void>('/overlay').ignore();
+    await tester.pumpAndSettle();
+
+    final route = _routeOf(tester, find.text('overlay'))! as PageRouteBuilder;
+    expect(route.transitionDuration, const Duration(milliseconds: 300));
+    expect(route.reverseTransitionDuration, const Duration(milliseconds: 100));
+    expect(route.opaque, isFalse);
+    expect(route.barrierColor, const Color(0x80000000));
+    expect(route.barrierDismissible, isTrue);
+    expect(route.fullscreenDialog, isTrue);
+    expect(route.maintainState, isTrue);
+    expect(find.text('below'), findsOneWidget);
   });
 
   testWidgets('a route with no transition inherits the app-wide default', (

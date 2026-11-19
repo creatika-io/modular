@@ -232,6 +232,55 @@ extension ModularNavigationX on BuildContext {
     );
   }
 
+  /// Replaces the TOP route with [path] IN PLACE: the page's content is
+  /// built anew (its `State`, `provide` scope and page storage) while the
+  /// shell and its outlets stay, and a changed URL replaces the browser's
+  /// current history entry (as does any other navigation in the same frame).
+  /// When [path] has the same transition, the Navigator reuses the page's
+  /// route: no transition runs, dialogs above the page stay and observers see
+  /// no push or pop; another transition gets a new route. Dispatches like
+  /// [replace] and swaps only the top page, popping none; the returned
+  /// `Future` completes with the new route's pop result. With pages below, a
+  /// system Back still waiting on a `WillPopScope` or `Form.onWillPop`
+  /// callback can pop the replacement.
+  Future<T?> replaceInPlace<T extends Object?>(
+    String path, {
+    Object? arguments,
+  }) {
+    final target = _resolve(path);
+    if (_outletNavigation(target, arguments)
+        case (final outlet, final destination)?) {
+      return outlet.context._replacingHistoryEntry(
+        () => outlet.replaceInPlace<T>(
+          destination.uri.toString(),
+          arguments: destination.arguments,
+        ),
+      );
+    }
+    final delegate = Router.of(this).routerDelegate;
+    if (delegate is ModularRouterDelegate) {
+      return _replacingHistoryEntry(
+        () => delegate.replaceInPlace<T>(target, arguments: arguments),
+      );
+    }
+    throw FlutterError(
+      'context.replaceInPlace: no outlet or ModularRouterDelegate found.',
+    );
+  }
+
+  /// Runs [navigation]; a location it changes replaces the current history
+  /// entry of the router above this context.
+  R _replacingHistoryEntry<R>(R Function() navigation) {
+    final delegate = Router.maybeOf(this)?.routerDelegate;
+    if (delegate is! ModularRouterDelegate) return navigation();
+    final location = delegate.currentConfiguration?.location;
+    final result = navigation();
+    if (delegate.currentConfiguration?.location != location) {
+      Router.neglect(this, () {});
+    }
+    return result;
+  }
+
   /// Pops repeatedly until [predicate] holds for the top route. Targets the
   /// nearest poppable [RouterOutlet], else the root delegate.
   void popUntil(bool Function(RouteState state) predicate) {

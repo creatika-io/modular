@@ -13,6 +13,9 @@ import 'transition.dart';
 /// Builds one level of a matched route chain: the route's page (with its
 /// page-scoped `provide`), wrapped in an [_OutletScope] that carries the
 /// REMAINING chain — and any [arguments] — to any [RouterOutlet] inside it.
+///
+/// [storage], given to a page replaced in place, builds the level anew with
+/// page storage of its own, its `State` included.
 Widget buildRouteLevel({
   required List<RouteLevel> chain,
   required int index,
@@ -20,6 +23,7 @@ Widget buildRouteLevel({
   required Uri uri,
   required Map<String, String> params,
   required RouteCollection routes,
+  PageStorageBucket? storage,
   Object? arguments,
   PageTransition defaultTransition = TransitionType.material,
   String? outlet,
@@ -34,7 +38,7 @@ Widget buildRouteLevel({
     page = ScopedHost(provide: provide, parent: injector, child: page);
   }
 
-  return _OutletScope(
+  final scope = _OutletScope(
     chain: chain,
     index: index + 1,
     injector: injector,
@@ -46,6 +50,8 @@ Widget buildRouteLevel({
     outlet: outlet,
     child: page,
   );
+  if (storage == null) return scope;
+  return PageStorage(key: ObjectKey(storage), bucket: storage, child: scope);
 }
 
 class _OutletScope extends InheritedWidget {
@@ -135,7 +141,8 @@ class RouterOutletEntry {
     required this.child,
   });
 
-  /// Stable while the page is in the stack; key its presentation with it.
+  /// Stable while the page is in the stack, and handed on when it is replaced
+  /// in place; key its presentation with it.
   final LocalKey key;
 
   /// The route the page shows: its `uri`, path `params` and `arguments`.
@@ -295,15 +302,16 @@ class RouterOutletState extends State<RouterOutlet> {
       return entry;
     }
     final entry = _entryFor(path, arguments);
-    _replaceEntriesFrom(
-      _stack.isEmpty ? 0 : _stack.length - 1,
-      entry,
-      result: result,
-    );
+    _replaceEntriesFrom(_topIndex, entry, result: result);
     return entry;
   }
 
-  _OutletEntry _entry(Uri uri, Object? arguments) {
+  /// Where the top entry is, or the first one goes.
+  int get _topIndex => _stack.isEmpty ? 0 : _stack.length - 1;
+
+  /// An entry that [replacing] hands its page key on to, so the page keeps
+  /// its route.
+  _OutletEntry _entry(Uri uri, Object? arguments, {_OutletEntry? replacing}) {
     final location = _source.outlet == null
         ? uri
         : canonicalOutletLocation(uri);
@@ -311,16 +319,20 @@ class RouterOutletState extends State<RouterOutlet> {
     final tags = _source.match(location)?.last.route.ownerTags ?? const [];
     return _OutletEntry(
       location,
-      ValueKey(id),
+      replacing?.key ?? ValueKey(id),
       id,
       Completer<Object?>(),
       arguments,
       tags,
+      storage: replacing == null ? null : PageStorageBucket(),
     );
   }
 
-  _OutletEntry _entryFor(String path, Object? arguments) =>
-      _entry(Uri.parse(path), arguments);
+  _OutletEntry _entryFor(
+    String path,
+    Object? arguments, {
+    _OutletEntry? replacing,
+  }) => _entry(Uri.parse(path), arguments, replacing: replacing);
 
   void _add(_OutletEntry entry) {
     _delegate?.manager?.enter(entry.id, entry.ownerTags);
@@ -374,6 +386,21 @@ class RouterOutletState extends State<RouterOutlet> {
   Future<T?> replace<T extends Object?>(String path, {Object? arguments}) {
     final entry = _replaceTop(path, arguments);
     setState(() {});
+    _reportLocation();
+    return entry.completer.future.then((value) => value as T?);
+  }
+
+  /// Replaces this outlet's TOP sub-route with [path] in place: it keeps the
+  /// replaced page's key, so no transition runs unless [path] has another
+  /// transition. The browser history entry is replaced only through
+  /// `context.replaceInPlace`, which also reports any other navigation in the
+  /// same frame as a replacement.
+  Future<T?> replaceInPlace<T extends Object?>(
+    String path, {
+    Object? arguments,
+  }) {
+    final entry = _entryFor(path, arguments, replacing: _stack.lastOrNull);
+    setState(() => _replaceEntriesFrom(_topIndex, entry));
     _reportLocation();
     return entry.completer.future.then((value) => value as T?);
   }
@@ -485,7 +512,10 @@ class RouterOutletState extends State<RouterOutlet> {
     final pageBackArrivedOn = _stack.lastOrNull;
     if (pageBackArrivedOn == null) return;
     final poppedInside = await _navigatorKey.currentState?.maybePop() ?? false;
-    if (!poppedInside && mounted) _remove(pageBackArrivedOn.key, null);
+    // A page replaced in place keeps the key: only the entry itself may close.
+    if (!poppedInside && mounted && _stack.contains(pageBackArrivedOn)) {
+      _remove(pageBackArrivedOn.key, null);
+    }
   }
 
   bool get _awaitsReset =>
@@ -557,6 +587,7 @@ class RouterOutletState extends State<RouterOutlet> {
       params: _source.params,
       arguments: entry.arguments,
       routes: _source.routes,
+      storage: entry.storage,
       defaultTransition: _source.defaultTransition,
       outlet: _source.outlet,
     );
@@ -614,14 +645,18 @@ class _OutletEntry {
     this.id,
     this.completer,
     this.arguments,
-    this.ownerTags,
-  );
+    this.ownerTags, {
+    this.storage,
+  });
   final Uri uri;
   final LocalKey key;
   final String id;
   final List<String> ownerTags;
   final Completer<Object?> completer;
   final Object? arguments;
+
+  /// Set on a page replaced in place, whose route keeps the old page storage.
+  final PageStorageBucket? storage;
 }
 
 /// Exposes the nearest [RouterOutletState] to the navigation extension.

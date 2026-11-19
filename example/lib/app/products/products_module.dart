@@ -12,7 +12,8 @@ import 'viewmodels/product_list_view_model.dart';
 /// live in `pages/` and `viewmodels/`.
 ///
 /// Demonstrates: page-scoped view models (`addChangeNotifier`), params to the
-/// view (`/:id`), `add` (non-reactive `Disposable` resource), and `addStream`.
+/// view (`/:id`), `add` (non-reactive `Disposable` resource), `addStream`, and
+/// `context.replaceInPlace` (the detail page's "Next product").
 /// ---------------------------------------------------------------------------
 
 /// `addStream` demo: a live "people viewing" ticker.
